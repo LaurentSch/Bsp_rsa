@@ -1,3 +1,4 @@
+import sys
 import time
 from src.rsa_simple import rsa
 
@@ -15,37 +16,30 @@ def check_time_decorator(func):
 
 
 @check_time_decorator
-def naive_exponent(base, exp, mod):
-    """
-    Problem with this implementation: Does not work for large numbers because of float size limitations
-    """
-
-    number = base**exp
-    fit = number // mod
-    a = mod * fit
-    return number - a
-
-
-@check_time_decorator
-def more_naive_exponent(base, exp, mod):
-    result = 1
-    for i in range(exp):
-        result = (result * base) % mod
-        # print(i)
-
-    return result
+def fast_exponent(base, exp, mod):
+    x = base
+    y = base if exp % 2 == 1 else 1
+    exp //= 2
+    while exp > 0:
+        x = (x ** 2) % mod
+        if exp % 2 == 1:
+            y = (x if y == 1 else (y * x) % mod)
+        exp //= 2
+        if exp < 10**100:
+            print(exp)
+            print(x)
+            print(y)
+    return y
 
 
 def testing_stuff():
     keys = rsa()
     modulo = keys["modulo"]
-    # Almost exactly 5 seconds: 4.961990118026733 seconds
-    print(f"The result is {more_naive_exponent(2, 19 * 10**6, modulo)}")
+    # Almost exactly 5 seconds: 4.9 seconds
+    #print(f"The result is {fast_exponent(2, 19 * 10**34000, modulo)}")
+    print(f"The result is {fast_exponent(5, 19, 13)}")
 
 
 if __name__ == "__main__":
+    #sys.set_int_max_str_digits(10**1000)
     testing_stuff()
-
-
-
-
