@@ -47,7 +47,7 @@ def find_e(lambda_n):
         count += 1
         e = random.randrange(2, lambda_n + 1)
         if gcd(e, lambda_n) == 1:
-            print(f"E found after {count} iterations")
+            # print(f"E found after {count} iterations")
             return e
 
 
@@ -147,4 +147,5 @@ def testing_stuff():
     print(verify(keys.get("public_exponent"), keys.get("modulo"), signature, message2))
 
 
-testing_stuff()
+if __name__ == "__main__":
+    testing_stuff()
