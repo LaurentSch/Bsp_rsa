@@ -21,6 +21,7 @@ def fast_exponent(base, exp, mod):
     step = base
     for i in binary_exponent:
         # print(i)
+
         # square
         # print(f"{step}**2 % {mod} = {step**2 % mod}")
         step = step**2 % mod
@@ -45,12 +46,19 @@ def fast_exponent_paper(base, exp, mod):
     return y
 
 
+@check_time_decorator
+def build_in_pow(base, exp, mod):
+    return pow(base, exp, mod)
+
+
 def testing_stuff():
     keys = rsa()
     modulo = keys["modulo"]
     # Almost exactly 5 seconds: 4.9 seconds
-    print(f"The for paper result is {fast_exponent_paper(2, 19 * 10**34000, modulo)}")
-    print(f"The for my result is    {fast_exponent(2, 19 * 10**500000, modulo)}")
+    # print(f"The for paper result is {fast_exponent_paper(2, 19 * 10**34000, modulo)}")
+    print(f"The for my result is {fast_exponent(2, 19 * 10**450000, modulo)}")
+    # pow is faster -.-
+    print(f"Python pow result is {build_in_pow(2, 19 * 10**450000, modulo)}")
     # print(f"The for my result is {fast_exponent(3, 45, 7)}")
 
     # print(f"The result is {fast_exponent(5, 19, 13)}")
