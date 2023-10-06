@@ -40,7 +40,8 @@ def more_naive_exponent(base, exp, mod):
 def testing_stuff():
     keys = rsa()
     modulo = keys["modulo"]
-    print(f"The result is {more_naive_exponent(2, 10000000, modulo)}")
+    # Almost exactly 5 seconds: 4.961990118026733 seconds
+    print(f"The result is {more_naive_exponent(2, 19000000, modulo)}")
 
 
 if __name__ == "__main__":
