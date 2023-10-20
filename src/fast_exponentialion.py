@@ -18,7 +18,7 @@ def check_time_decorator(func):
     return wrapper
 
 
-@check_time_decorator
+#@check_time_decorator
 def fast_exponent(base, exp, mod):
     if exp == 0:
         return 1
