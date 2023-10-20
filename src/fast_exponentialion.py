@@ -15,7 +15,7 @@ def check_time_decorator(func):
     return wrapper
 
 
-@check_time_decorator
+#@check_time_decorator
 def fast_exponent(base, exp, mod):
     binary_exponent = bin(exp)[3:]
     step = base
