@@ -1,3 +1,4 @@
+import random
 import time
 from Crypto.Hash import SHA256
 from Crypto.Util import number
@@ -22,8 +23,8 @@ def rsa():
     :return: dictionary with modulo, public_exponent and private_exponent
     """
     # Generate two distinct primes p and q
-    p = number.getPrime(512)
-    q = number.getPrime(512)
+    p = number.getPrime(1512)
+    q = number.getPrime(1512)
 
     # Use p and q to generate N
     n = p*q
@@ -47,7 +48,7 @@ def rsa():
     return keys
 
 
-def encrypt_w_crt(public_exponent, public_mod, message):
+def encrypt(public_exponent, public_mod, message):
     """
     Encrypt a message with the RSA cryptosystem
     :param public_exponent: your public exponent used for RSA
@@ -68,13 +69,13 @@ def decrypt(private_exponent, public_mod, encrypted_msg):
     :param encrypted_msg: integer message encrypted with your public RSA key
     :return: integer decrypted message
     """
-    decrypted_msg = pow(encrypted_msg, private_exponent, public_mod)
+    decrypted_msg = fast_exponent(encrypted_msg, private_exponent, public_mod)
     convert_to_text = decrypted_msg
     return convert_to_text
 
 
 @check_time_decorator
-def decrypt_w_crt(p, q, private_exponent, public_mod, encrypted_msg):
+def decrypt_w_crt(p, q, private_exponent, encrypted_msg):
     """
     Decrypt a message that is encrypted with your public RSA key
     :param private_exponent: your private RSA key
@@ -82,19 +83,54 @@ def decrypt_w_crt(p, q, private_exponent, public_mod, encrypted_msg):
     :param encrypted_msg: integer message encrypted with your public RSA key
     :return: integer decrypted message
     """
-    message_p = fast_exponent(encrypted_msg, private_exponent, p)
-    message_q = fast_exponent(encrypted_msg, private_exponent, q)
-    # Calculate the two intermediate values h_p and h_q
-    # we use fast_exponent to speed this up: ((M_q - M_p) * q**(-1)) % p
-    h_p = ((message_q - message_p) * fast_exponent(q, -1, p)) % p
-    h_q = ((message_p - message_q) * fast_exponent(p, -1, q)) % q
-    # compute the final result M
-    decrypted_msg = (message_q + (h_p * q) + (h_q * p)) % public_mod
-    convert_to_text = decrypted_msg
-    return convert_to_text
+    # print(f"Is pow == by hand? {(private_exponent % (p-1)) == pow(private_exponent, 1, p-1)}")
+    # From wikipedia pseudo-code
+    # print(f"Value for private exponent: {private_exponent}")
+    d_p = fast_exponent(private_exponent, 1, (p-1))
+    print(f"Value for d_p: {d_p}")
+    d_q = fast_exponent(private_exponent, 1, (q-1))
+    print(f"Value for d_q: {d_q}")
+    q_inv = fast_exponent(q, -1, p)
+    print(f"q_inv is: {q_inv}")
+
+    # Calculate intermediate messages
+    m_p = fast_exponent(encrypted_msg, d_p, p)
+    print(f"Message m1: {m_p}")
+    m_q = fast_exponent(encrypted_msg, d_q, q)
+    print(f"Message m2: {m_q}")
+    h = (q_inv * (m_p - m_q)) % p
+    print(h)
+    # Calculate the final decrypted message
+    decrypted_message = m_q + h * q
+
+    return decrypted_message
 
 
-def sign_w_crt(p, q, private_exponent, public_mod, message):
+def decrypt_crt_w_fault(p, q, private_exponent, encrypted_msg):
+    d_p = fast_exponent(private_exponent, 1, (p-1))
+    d_q = fast_exponent(private_exponent, 1, (q-1))
+    q_inv = fast_exponent(q, -1, p)
+
+    # Calculate intermediate messages
+    m_p = fast_exponent(encrypted_msg, d_p, p)
+    m_q = fast_exponent(encrypted_msg, d_q, q)
+
+    # Introduce fault
+    fault = random.randint(0, 1)
+    if fault == 0:
+        m_p = m_p * 10 + 1
+    else:
+        m_q = m_q * 10 + 1
+    print(f"Message m1: {m_p}")
+    print(f"Message m2: {m_q}")
+
+    h = (q_inv * (m_p - m_q)) % p
+    decrypted_message = m_q + h * q
+
+    return decrypted_message, m_p, m_q
+
+
+def sign_w_crt(private_exponent, public_mod, message):
     """
     Create RSA signature for an integer message
 
@@ -105,8 +141,8 @@ def sign_w_crt(p, q, private_exponent, public_mod, message):
     :return: RSA signature for your message
     """
     hashed_msg = int.from_bytes(SHA256.new(str(message).encode()).digest(), byteorder='big')
-    signature = encrypt_w_crt(private_exponent, public_mod, hashed_msg)
-    return signature
+    signature = encrypt(private_exponent, public_mod, hashed_msg)
+    return hashed_msg, signature
 
 
 def verify_w_crt(p, q, public_exponent, public_mod, signature, message):
@@ -128,16 +164,22 @@ def verify_w_crt(p, q, public_exponent, public_mod, signature, message):
         return False
 
 
-def chinese_remainder(p, q, n, m_p, m_q):
-    # Calculate the two intermediate values h_p and h_q
-    # we use fast_exponent to speed this up: ((M_q - M_p) * q**(-1)) % p
-    h_p = ((m_q - m_p) * fast_exponent(q, -1, p)) % p
-    h_q = ((m_p - m_q) * fast_exponent(p, -1, q)) % q
-    # compute the final result M
-    m = (m_p + (h_p * q) + (h_q * p)) % n
-    return m
+def verify_crt_w_fault(p, q, private_exponent, signature, message):
+    decrypted_sign, m_p, m_q = decrypt_crt_w_fault(p, q, private_exponent, signature)
+    hashed_msg = int.from_bytes(SHA256.new(str(message).encode()).digest(), byteorder='big')
+    return decrypted_sign, m_p, m_q
 
 
+def attack_w_signature(public_exponent, private_exponent, public_mod, p, q):
+    message = 1337
+    hash_s, sign = sign_w_crt(public_exponent, public_mod, message)
+    decrypted_sign, m_p, m_q = verify_crt_w_fault(p, q, private_exponent, sign, message)
+    print(f"m_p: {m_p}")
+    print(f"m_q: {m_q}")
+    is_zero_p = pow((pow(hash_s, public_exponent) - m_p), 1, p)
+    print(f"Is this zero? {is_zero_p}")
+    is_zero_q = pow((pow(hash_s, public_exponent) - m_q), 1, q)
+    print(f"Is this zero? {is_zero_q}")
 
 
 
@@ -164,12 +206,13 @@ def testing_stuff():
     #
     # print(verify_w_crt(p, q, keys.get("public_exponent"), keys.get("modulo"), signature, message2))
 
-    message3 = 43652452345642134631125442313245423424244444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444
-    encrypted_msg = encrypt_w_crt(keys.get("public_exponent"), keys.get("modulo"), message3)
-    print(decrypt_w_crt(p, q, keys.get("private_exponent"), keys.get("modulo"), encrypted_msg))
-    print(decrypt(keys.get("private_exponent"), keys.get("modulo"), encrypted_msg))
-
-
+    message3 = 17
+    encrypted_msg = encrypt(keys.get("public_exponent"), keys.get("modulo"), message3)
+    # print(f"Encrypted Message = {encrypted_msg}")
+    # print("decrypt_w_crt result = ", decrypt_w_crt(p, q, keys.get("private_exponent"), encrypted_msg))
+    # print("decrypt result = ", decrypt(keys.get("private_exponent"), encrypted_msg))
+    print("decrypt_crt_w_fault result = ", decrypt_crt_w_fault(p, q, keys.get("private_exponent"), encrypted_msg))
+    attack_w_signature(keys.get("public_exponent"), keys.get("private_exponent"), keys.get("modulo"), p, q)
 
 if __name__ == "__main__":
     testing_stuff()
