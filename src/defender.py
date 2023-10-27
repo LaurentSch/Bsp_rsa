@@ -4,6 +4,16 @@ import random
 from decimal import Decimal
 
 
+def decrypt_w_public_key(message, target):
+    decrypted_msg = pow(message, target.d, target.n)
+    return decrypted_msg
+
+
+def encrypt_w_public_key(message, target):
+    encrypted_msg = pow(message, target.d, target.n)
+    return encrypted_msg
+
+
 class Defender:
     """
     Generates encrypts messages and creates signatures using CTR
@@ -80,18 +90,14 @@ class Defender:
         # Introduce fault
         fault = random.randint(0, 1)
         if fault == 0:
-            c_p = c_p * 10 + 1
+            c_p = c_p * random.randint(1, 99) // 10
         else:
-            c_q = c_q * 10 + 1
+            c_q = c_q * random.randint(1, 99) // 10
 
         h = (q_inv * (c_p - c_q)) % self._p
 
         # Calculate the final encrypted message
         encrypted_msg = c_q + h * self._q
-        return encrypted_msg
-
-    def encrypt_w_public_key(self, public_exponent, public_modulo, message):
-        encrypted_msg = pow(message, public_exponent, public_modulo)
         return encrypted_msg
 
     def decrypt_w_crt(self, encrypted_msg):
@@ -118,9 +124,9 @@ class Defender:
 
         return decrypted_message
 
-    def decrypt_crt_w_fault(self, private_exponent, encrypted_msg):
-        d_p = pow(private_exponent, 1, (self._p-1))
-        d_q = pow(private_exponent, 1, (self._q-1))
+    def decrypt_crt_w_fault(self, encrypted_msg):
+        d_p = pow(self._e, 1, (self._p-1))
+        d_q = pow(self._e, 1, (self._q-1))
         q_inv = pow(self._q, -1, self._p)
 
         # Calculate intermediate messages
@@ -130,9 +136,9 @@ class Defender:
         # Introduce fault
         fault = random.randint(0, 1)
         if fault == 0:
-            m_p = m_p * 10 + 1
+            m_p = m_p * random.randint(1, 99) // 10
         else:
-            m_q = m_q * 10 + 1
+            m_q = m_q * random.randint(1, 99) // 10
 
         h = (q_inv * (m_p - m_q)) % self._p
         decrypted_message = m_q + h * self._q
@@ -176,7 +182,7 @@ class Defender:
         signature = self.encrypt_crt_w_fault(hashed_msg)
         return signature
 
-    def verify_w_crt(self, signature, message, target):
+    def verify(self, signature, message, sender):
         """
         Checks if message signature encryption can be decrypted with public key of the sender.
         If false, the sender of the message is not the person they claim they are.
@@ -187,7 +193,7 @@ class Defender:
         :param message: decrypted message (integer) you received
         :return: True if the decrypted signature matches the hash of the message
         """
-        decrypted_sign = self.decrypt_w_crt(signature)
+        decrypted_sign = decrypt_w_public_key(signature, sender)
         hashed_msg = int.from_bytes(SHA256.new(str(message).encode()).digest(), byteorder='big')
         if decrypted_sign == hashed_msg:
             return True
@@ -195,12 +201,27 @@ class Defender:
             return False
 
     def send_msg(self, message, target):
-        encrypted_msg = self.encrypt_w_public_key(target.d, target.n, message)
+        """
+        Send a message with RSA by using another actors public key and
+        signing the hash of the message with private key.
+        :param message: Integer message to be sent to target
+        :param target: Actor who's public key should be used to encrypt the message
+        :return: The encrypted message with your signature
+        """
+        encrypted_msg = encrypt_w_public_key(message, target)
         signature = self.sign_w_crt(message)
         return encrypted_msg, signature
 
     def send_msg_w_fault(self, message, target):
-        encrypted_msg = self.encrypt_w_public_key(target.d, target.n, message)
+        """
+        Send a message with RSA by using another actors public key and
+        signing the hash of the message with private key.
+        However, there will be a fault in the signing process
+        :param message: Integer message to be sent to target
+        :param target: Actor who's public key should be used to encrypt the message
+        :return: The encrypted message with your faulty signature
+        """
+        encrypted_msg = encrypt_w_public_key(message, target)
         signature = self.sign_crt_w_fault(message)
         return encrypted_msg, signature
 
