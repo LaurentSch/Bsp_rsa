@@ -84,9 +84,30 @@ def translate_trace(power_trace):
     return int(private_exponent, 2)
 
 
+# works for right-to-left exp
+def translate_trace_rtl(power_trace):
+    private_exponent = ""
+    # Boolean variable that tracks if the previous step was a computation spike for every bit in the exponent
+    was_spike = False
+    for i, item in enumerate(power_trace):
+        if item[1] < 7:
+            # check if element is the last in the trace.
+            if not was_spike:
+                private_exponent += "0"
+            was_spike = False
+        else:
+            private_exponent += "1"
+            was_spike = True
+    # reverse the string
+    private_exponent = private_exponent[::-1]
+    print(private_exponent)
+    return int(private_exponent, 2)
+
+
 if __name__ == "__main__":
     result, trace = fast_exponent(4288743, 8234214, 43)
     print(bin(8234214)[2:])
     print(translate_trace(trace))
     result2, trace2 = fast_exp(4288743, 8234214, 43)
+    print(translate_trace_rtl(trace2))
     plot_side_by_side(trace, trace2)
