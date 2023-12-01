@@ -1,5 +1,6 @@
 import random
 from math import gcd
+from src.defender import Defender
 
 
 # chatgpt helper function
@@ -68,7 +69,10 @@ def generate_blinding_var(mod, public_exp):
 
 
 if __name__ == "__main__":
+    a = Defender()
     result, trace = fast_exponent(4288743, 8234214, 43)
     print(result)
-    result, trace = fast_exponent_blinding(4288743, 8234214, 43)
+    # result, trace = fast_exponent_blinding(4288743, 8234214, 43)
+    result, trace = fast_exponent_blinding(4288743, a._e, a.n, a.d)
     print(result)
+    print(pow(4288743, a._e, a.n))
