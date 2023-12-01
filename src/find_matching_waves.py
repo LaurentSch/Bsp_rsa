@@ -17,6 +17,9 @@ def greatest_match(trace):
         print(f"largest_tuples[0][0]: {largest_tuples[0][0]} and largest_tuples[1][0]: {largest_tuples[1][0]}")
         if largest_tuples[0][0] > 1 and largest_tuples[1][0] > 1:
             winner = largest_tuples
+        else:
+            # to stop when nothing better will be found (probably)
+            break
     return winner
 
 
@@ -34,14 +37,22 @@ def find_patterns(trace, wave_length):
 
 
 def find_candidates(patterns):
+    """
+    Find the amount of times, each pattern is repeating
+    Return the two most repeated patterns with the number of times they repeated.
+    """
     pattern_repetition = []
     for i in range(len(patterns)):
         count = 0
+        pattern = ""
         for j in range(i + 1, len(patterns)):
             correlation, _ = pearsonr(patterns[i], patterns[j])
             if correlation > 0.8:
                 count += 1
-        pattern_repetition.append((count, patterns[i]))
+                pattern = pattern + "1"
+            else:
+                pattern = pattern + "0"
+        pattern_repetition.append((count, patterns[i], pattern))
     # Use heapq to find the two tuples in our list of tuples, that have the largest element in it's first position.
     # key=lambda x: x[0] targets the first position of the tuple
     largest_tuples = heapq.nlargest(2, pattern_repetition, key=lambda x: x[0])
