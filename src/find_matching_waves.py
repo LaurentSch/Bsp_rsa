@@ -44,19 +44,37 @@ def find_candidates(patterns):
     pattern_repetition = []
     for i in range(len(patterns)):
         count = 0
-        pattern = ""
+        pattern = []
         for j in range(i + 1, len(patterns)):
             correlation, _ = pearsonr(patterns[i], patterns[j])
             if correlation > 0.8:
                 count += 1
-                pattern = pattern + "1"
-            else:
-                pattern = pattern + "0"
+                pattern.append(j)
+
         pattern_repetition.append((count, patterns[i], pattern))
     # Use heapq to find the two tuples in our list of tuples, that have the largest element in it's first position.
     # key=lambda x: x[0] targets the first position of the tuple
     largest_tuples = heapq.nlargest(2, pattern_repetition, key=lambda x: x[0])
     return largest_tuples
+
+
+def find_exponent(winner):
+    """
+    Applies pearson of the winning wave sections on the trace again
+    """
+    list_a = winner[0][2]
+    list_b = winner[1][2]
+    max_value = max(max(list_a, default=0), max(list_b, default=0))
+    binary_string = ""
+
+    for num in range(1, max_value + 1):
+        if num in list_a:
+            binary_string += '1'
+        elif num in list_b:
+            binary_string += '0'
+
+    return binary_string
+
 
 
 if __name__ == "__main__":
@@ -92,6 +110,7 @@ if __name__ == "__main__":
     # most_common = find_candidates(patterns)
     # print(most_common)
 
-    print(greatest_match(trace))
+    winner = greatest_match(trace)
+    print(find_exponent(winner))
 
 
