@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.stats import pearsonr
+from tqdm import tqdm
 
 
 def greatest_match(trace, min_correlation, nbr_expected_matches):
@@ -7,99 +8,139 @@ def greatest_match(trace, min_correlation, nbr_expected_matches):
     Find the best two correlated sequences for different wave lengths
     logic: longer sequences are more valuable, since they are less likely to happen
     """
-    # Run the loop once to initialize the first values of winners
-    patterns = find_patterns(trace, 10)
-    largest_tuples = find_candidates(patterns, min_correlation)
-    winners = largest_tuples
-    for i in range(11, 40):
+    # create list of tuples. Each tuple is composed of the largest 2 unique patterns of size n.
+    all_large_tuples = []
+    for i in range(10, 40):
         patterns = find_patterns(trace, i)
-        largest_tuples = find_candidates(patterns, min_correlation)
+        candidates = find_candidates(patterns, min_correlation)
+        all_large_tuples.append(candidates)
 
-        # gauntlet
-        print(f"largest_tuples[0][0]: {largest_tuples[0][0]} and largest_tuples[1][0]: {largest_tuples[1][0]}")
-        # if largest_tuples[0][0] + largest_tuples[1][0] >= nbr_expected_matches - 1:
-        #     winner = largest_tuples
-        # else:
-        #     # to stop when nothing better will be found (probably)
-        #     break
+    # I want a loading bar, bc it's fun.
+    total_iterations = len(all_large_tuples)
 
-        # gauntlet
-        winners = gauntlet(winners, largest_tuples[0], nbr_expected_matches)
-        winners = gauntlet(winners, largest_tuples[1], nbr_expected_matches)
+    # Start from the smallest pattern and check if we have a pattern that fits after it. If not, go next pattern.
+    # If yes, try matching until full pattern is found.
+    # tqdm with its keywords 'desc' and 'unit' is to create a loading bar for fun. Other than that, it's a simple for loop.
+    for i in tqdm(range(total_iterations), desc="Processing", unit="iteration"):
+        # len(all_large_tuples[i]) is equal to 2, since we decided for now, that we only need the two best patterns
+        # from each length
+        for j in range(len(all_large_tuples[i])):
+            pattern_1 = all_large_tuples[i][j][0]
+            # check wave after this one
+            # Note, that the below line gives the first position that is NOT included in pattern_1
+            end_of_p1_in_trace = all_large_tuples[i][j][1] + len(pattern_1)
+            # To get second pattern
+            # we have to iterate over all elements in all_large_tuples, since we only ruled out previous elements
+            # that start the sequence. They still could be the second element.
+            for k in range(len(all_large_tuples)):
+                for m in range(len(all_large_tuples[k])):
+                    # Make sure the algo is not trying to match patterns further than the length of the trace.
+                    # This will only be called, if no repeating pattern is found at all.
+                    if end_of_p1_in_trace + len(all_large_tuples[k][m][0]) > len(trace):
+                        return "No Repeating patterns found"
+                    if get_correlation(trace, end_of_p1_in_trace, all_large_tuples[k][m], min_correlation):
+                        exponent = find_bin_exp(trace, all_large_tuples[i][j], all_large_tuples[k][m], min_correlation)
+                        # Workaround solution to make sure that the second match is not just a subpattern of the
+                        # correct pattern.
+                        if len(exponent) > 2:
+                            return exponent
 
-    return winners
 
-
-def gauntlet(winners, challenger, nbr_expected_matches):
+def find_bin_exp(trace, tuple_1, tuple_2, min_correlation=0.7):
     """
-    Checks if current best guess should be replaced by new one or not.
-    :param winners: current best repeating pattern guess
-    :param challenger: new potential best pattern guess
-    :param nbr_expected_matches: expected exponent lenght
-    :return: updated best repeating pattern guess
+    Takes two patterns and tries to match them to the trace.
+    :param trace: Energy consumption trace in form of a list of values
+    :param tuple_1: tuple containing (list of values, initial position in the trace, integer number)
+    :param tuple_2: tuple containing (list of values, initial position in the trace, integer number)
+    :param min_correlation: Value between 0 and 1 that represents how closely the patterns need to match the trace.
+    The higher the number, the larger the expected correlation is.
+    :return: String representation of a binary number
     """
+    # We will assume that the first matched pattern is a 1 in the exponent. It could also represent a 0.
+    # We simply have no way to know
+    exponent = "1"
+    current_trace_loc = tuple_1[1] + len(tuple_1[0])
+    while True:
+        # Check if the next bit matches pattern_1
+        if get_correlation(trace, current_trace_loc, tuple_1, min_correlation):
+            exponent += "1"
+            current_trace_loc += len(tuple_1[0])
+            # skip to next loop iteration
+            continue
+        # Check for patter_2
 
-    correlation_win1_new1 = abs(average_correlation(winners[0][1], challenger[1]))
-    correlation_win2_new1 = abs(average_correlation(winners[1][1], challenger[1]))
+        if get_correlation(trace, current_trace_loc, tuple_2, min_correlation):
+            exponent += "0"
+            current_trace_loc += len(tuple_2[0])
+            # skip to next loop iteration
+            continue
 
-    # 1) pattern match and larger length -> replace (no questions asked)
-    # no need to check length, since this is the first element, so it's size is always larger
-    if correlation_win1_new1:
-        winners[0] = challenger
-        # 1.1) pattern match and larger length -> replace (no questions asked)
-        if correlation_win2_new1:
-            winners[1] = challenger
-        # 1.2) pattern doesn't match. Check match amount in comparison to nbr_expected_matches
-        elif winners[0][0] + challenger[0] >= nbr_expected_matches:
-            winners[1] = challenger
-    # 2) pattern doesn't match.
+        # If neither if condition holds, we assume we arrived at the end of the exponent and break out of the loop
+        break
+    print(f"The Exponent is 1{exponent} or 1{''.join(['1' if bit == '0' else '0' for bit in exponent])}")
+    return exponent
+
+
+def get_correlation(trace, trace_start_loc, tuple_1, min_correlation):
+    """
+    Checks if the correlation of a tuple compared to a sublist of the trace is larger than min_correlation
+    :param trace: Energy consumption trace in form of a list of values
+    :param trace_start_loc: Where the sublist of the trace starts at
+    :param tuple_1: tuple containing (list of values, initial position in the trace, integer number) that is to
+    be compared to the trace sublist
+    :param min_correlation: Value between 0 and 1 that represents how closely the patterns need to match the trace.
+    The higher the number, the larger the expected correlation is.
+    :return: True if the correlation value between sub-trace and tuple is larger than min_correlation.
+    False if the correlation value is smaller.
+    """
+    # Take a snipped out of the trace of the same length as pattern_1
+    trace_part = trace[trace_start_loc:trace_start_loc+len(tuple_1[0])]
+    correlation, _ = pearsonr(trace_part, tuple_1[0])
+    correlation = abs(correlation)
+    if correlation >= min_correlation:
+        return True
     else:
-        # 2.1) pattern matches winners[1] -> replace
-        if correlation_win2_new1:
-            winners[1] = challenger
-        # 2.2) pattern length bigger than winners[0] and bigger or equal to nbr_expected_matches -> replace
-        elif len(winners[0][1]) < len(challenger[1]) and winners[1][0] + challenger[0] >= nbr_expected_matches:
-            winners[0] = challenger
-        # 2.3) pattern length bigger than winners[1]  and bigger or equal to nbr_expected_matches -> replace
-        elif winners[0][0] + challenger[0] >= nbr_expected_matches:
-            winners[1] = challenger
-
-    return winners
+        return False
 
 
 def find_patterns(trace, wave_length):
     """
     Get all sets of values of size 'wave length' that follow directly after each other as a list of lists.
+    :returns list of tuples with first position: list of numbers of the wave, and second position wave start position
     """
     patterns = []
     for i in range(len(trace) - wave_length + 1):
         pattern = []
         for j in range(wave_length):
             pattern.append(trace[i + j])
-        patterns.append(pattern)
+        # i represents where the pattern started. Useful for finding the right pattern later.
+        patterns.append((pattern, i))
     return patterns
 
 
 def find_candidates(patterns, min_correlation):
     """
     Find the amount of times, each pattern is repeating
-    Return the two most repeated patterns with the number of times they repeated.
+    :returns list of tuples:
+        first element  = the list of numbers that represent the pattern
+        second element   = the starting position of the pattern
+        third element   = how often the pattern had a high correlation
     """
     pattern_repetition = []
     for i in range(len(patterns)):
         count = 0
-        pattern = []
-        correlation_total = 0
         for j in range(i + 1, len(patterns)):
-            correlation, _ = pearsonr(patterns[i], patterns[j])
+            correlation, _ = pearsonr(patterns[i][0], patterns[j][0])
             correlation = abs(correlation)
             if correlation > min_correlation:
                 count += 1
-                pattern.append(j)
-                correlation_total += correlation
 
-        pattern_repetition.append((count, patterns[i], pattern, correlation_total))
-    # sort list by third element in the tuple
+        # patterns[i][0] for the list of numbers that are the pattern
+        # patterns[i][1] for the starting position of the pattern
+        # count = how often the pattern had a high correlation
+        pattern_repetition.append((patterns[i][0], patterns[i][1], count))
+    # sort list by third element in the tuple.
+    # Meaning by the number of times it was repeated (by count).
     sorted_list = sorted(pattern_repetition, key=lambda x: x[2])
 
     largest_tuples = find_largest_with_low_correlation(sorted_list)
@@ -109,7 +150,7 @@ def find_candidates(patterns, min_correlation):
 
 def find_largest_with_low_correlation(sorted_list):
     """
-    Finds the largest two lists of numbers that don't have a height pearson correlation
+    Finds the largest two lists of numbers that don't have a high pearson correlation
     :param sorted_list: list of tuples containing a list of elements in the second postion
     :return: the two largest tuples with low pearson correlation
     """
@@ -117,60 +158,13 @@ def find_largest_with_low_correlation(sorted_list):
     largest_tuples = [largest_tuple]
     for element in sorted_list[1:]:
         # check if there is a high correlation. If yes, pass
-        if pearsonr(largest_tuple[1], element[1]).statistic > 0.4:
+        if pearsonr(largest_tuple[0], element[0]).statistic > 0.4:
             continue
         else:
             second_largest = element
             largest_tuples.append(second_largest)
             break
     return largest_tuples
-
-
-def average_correlation(list_1, list_2):
-    """
-    Calculates the average peason correlation between two lists.
-    :param list_1: list of elements
-    :param list_2: list of elements
-    :return: average pearson correlation
-    """
-    # Find the larger and smaller lists
-    if len(list_1) >= len(list_2):
-        list_a = list_1
-        list_b = list_2
-    else:
-        list_a = list_2
-        list_b = list_1
-
-    correlations = []
-    # Iterate over the possible windows of list_a
-    for i in range(len(list_a) - len(list_b) + 1):
-        compare_list = list_a[i:i + len(list_b)]
-        correlation, _ = pearsonr(compare_list, list_b)
-        correlations.append(correlation)
-
-    # Calculate the average correlation
-    average_corr = sum(correlations) / len(correlations)
-
-    return average_corr
-
-
-def find_exponent(winner):
-    """
-    Applies pearson of the winning wave sections on the trace again
-    """
-    list_a = winner[0][2]
-    list_b = winner[1][2]
-    max_value = max(max(list_a, default=0), max(list_b, default=0))
-    binary_string = ""
-
-    for num in range(1, max_value + 1):
-        if num in list_a:
-            binary_string += '1'
-        elif num in list_b:
-            binary_string += '0'
-
-    return binary_string
-
 
 
 if __name__ == "__main__":
@@ -190,9 +184,9 @@ if __name__ == "__main__":
     # Set a seed for reproducibility
     np.random.seed(42)
     # Generate a random list of size 50
-    trace = np.random.rand(50)
+    trace_a = np.random.rand(50)
     # Display the generated list
-    print(trace)
+    print(trace_a)
     # print(frequent_patterns)
     # x = [1, 6, 1.2, 8, 0.4, 9]
     # y = [1.2, 8, 0.5, 5, 0.9, 8]
@@ -206,8 +200,9 @@ if __name__ == "__main__":
     # most_common = find_candidates(patterns)
     # print(most_common)
 
-    winner = greatest_match(trace, 0.4, 2)
+    trace_a = [-0.31640625, -0.109375, -0.2421875, -0.46875, -0.1484375, -0.12890625, -0.296875, -0.47265625, -0.4453125, -0.4609375, -0.21484375, -0.1171875, -0.28515625, -0.1796875, -0.26171875, -0.1875, -0.07421875, -0.0703125, -0.24609375, -0.453125, -0.109375, -0.23046875, -0.421875, -0.15234375, -0.24609375, -0.14453125, -0.2890625, -0.18359375, -0.27734375, -0.1796875, -0.2421875, -0.1484375, -0.26953125, -0.12890625, -0.2734375, -0.1796875, -0.265625, -0.16796875, -0.3046875, -0.1484375, -0.28515625, -0.1953125, -0.27734375, -0.16015625, -0.26953125, -0.1953125, -0.0703125, -0.16796875, -0.3359375, -0.21484375, -0.29296875, -0.19140625, -0.33203125, -0.23046875, -0.3046875, -0.1796875, -0.32421875, -0.2421875, -0.30859375, -0.17578125, -0.2734375, -0.19140625, -0.0859375, -0.17578125, -0.34765625, -0.21875, -0.30078125, -0.19140625, -0.328125, -0.21875, -0.29296875, -0.19140625, -0.32421875, -0.25, -0.30859375, -0.16796875, -0.27734375, -0.20703125, -0.078125, -0.17578125, -0.34765625, -0.22265625, -0.29296875, -0.19140625, -0.328125, -0.23046875, -0.30859375, -0.21484375, -0.2890625, -0.19921875, -0.30859375, -0.17578125, -0.3203125, -0.203125, -0.30078125, -0.19921875, -0.33203125, -0.16015625, -0.296875, -0.2109375, -0.296875, -0.19140625, -0.28515625, -0.22265625, -0.09765625, -0.19140625, -0.36328125, -0.23828125, -0.30859375, -0.2109375, -0.3515625, -0.25, -0.33203125, -0.22265625, -0.29296875, -0.2109375, -0.32421875, -0.18359375, -0.3203125, -0.21875, -0.296875, -0.203125, -0.33984375, -0.19140625, -0.328125, -0.23828125, -0.3203125, -0.1953125, -0.296875, -0.23046875, -0.10546875, -0.203125, -0.37890625, -0.25390625, -0.328125, -0.2109375, -0.3515625, -0.25, -0.3359375, -0.21875, -0.3515625, -0.265625, -0.33203125, -0.1875, -0.29296875, -0.21484375, -0.1015625, -0.1953125, -0.3671875, -0.2421875, -0.3125, -0.2109375, -0.3515625, -0.25390625, -0.328125, -0.2109375, -0.34765625, -0.2578125, -0.3203125, -0.1875, -0.2890625, -0.21875, -0.1015625, -0.19140625, -0.36328125, -0.23046875, -0.30859375, -0.203125, -0.34765625, -0.25390625, -0.33203125, -0.2265625, -0.2890625, -0.19921875, -0.3203125, -0.19140625, -0.32421875, -0.21875, -0.30078125, -0.20703125, -0.33984375, -0.17578125, -0.31640625, -0.23828125, -0.3203125, -0.19140625, -0.30078125, -0.21875, -0.09765625, -0.19140625, -0.36328125, -0.24609375, -0.3203125, -0.21484375, -0.35546875, -0.25390625, -0.33203125, -0.2109375, -0.35546875, -0.2734375, -0.3359375, -0.19140625, -0.2890625, -0.21875, -0.09765625, -0.19140625, -0.37109375, -0.23828125, -0.3203125, -0.203125, -0.3515625, -0.25, -0.33203125, -0.23828125, -0.30078125, -0.2109375, -0.31640625, -0.19140625, -0.31640625, -0.21484375, -0.30078125, -0.2109375, -0.3359375, -0.22265625, -0.3359375, -0.23046875, -0.31640625, -0.19921875, -0.296875, -0.23046875, -0.1015625, -0.1875, -0.36328125, -0.23828125, -0.31640625, -0.21484375, -0.35546875, -0.25390625, -0.33203125, -0.203125, -0.34765625, -0.26171875, -0.33203125, -0.19140625, -0.29296875, -0.2109375, -0.09375, -0.19140625, -0.35546875, -0.23046875, -0.30859375, -0.20703125, -0.34765625, -0.2421875, -0.328125, -0.203125, -0.34375, -0.26171875, -0.3359375, -0.19140625, -0.28515625, -0.2109375, -0.0859375, -0.19140625, -0.359375, -0.234375, -0.3125, -0.203125, -0.34765625, -0.23828125, -0.33203125, -0.23046875, -0.328125, -0.23046875, -0.3203125, -0.19140625, -0.3203125, -0.20703125, -0.29296875, -0.19140625, -0.328125, -0.17578125, -0.30078125, -0.2109375, -0.3125, -0.1875, -0.28515625, -0.22265625, -0.1015625, -0.19140625, -0.36328125, -0.23046875, -0.30859375, -0.203125, -0.35546875, -0.25390625, -0.3359375, -0.22265625, -0.2890625, -0.20703125, -0.3203125, -0.19140625, -0.328125, -0.22265625, -0.30078125, -0.20703125, -0.3359375, -0.18359375, -0.3203125, -0.23828125, -0.32421875, -0.19921875, -0.29296875, -0.23046875, -0.10546875, -0.19921875, -0.37109375, -0.25, -0.32421875, -0.21484375, -0.36328125, -0.24609375, -0.33203125, -0.23046875, -0.3125, -0.22265625, -0.33203125, -0.19140625, -0.328125, -0.21484375, -0.30859375, -0.21484375, -0.34765625, -0.19140625, -0.31640625, -0.23046875, -0.3125, -0.19140625, -0.30078125, -0.234375, -0.11328125, -0.20703125, -0.37109375, -0.2421875, -0.31640625, -0.21875, -0.35546875, -0.26171875, -0.33984375, -0.2109375, -0.3515625, -0.2578125, -0.33984375, -0.19140625, -0.29296875, -0.22265625, -0.09765625, -0.19140625, -0.36328125, -0.23828125, -0.3125, -0.21484375, -0.36328125, -0.2421875, -0.33203125, -0.19921875, -0.33984375, -0.265625, -0.3359375, -0.1875, -0.2890625, -0.22265625, -0.0859375, -0.19140625, -0.36328125, -0.23828125, -0.30859375, -0.21484375, -0.35546875, -0.2421875, -0.328125, -0.19921875, -0.33984375, -0.2578125, -0.3359375, -0.1796875, -0.28515625, -0.21484375, -0.08984375, -0.19140625, -0.36328125, -0.23046875, -0.30859375, -0.203125, -0.33984375, -0.23828125, -0.3203125, -0.23046875, -0.2890625, -0.203125, -0.31640625, -0.17578125, -0.31640625, -0.2109375, -0.29296875, -0.20703125, -0.33984375, -0.19140625, -0.3125, -0.23046875, -0.32421875, -0.19140625, -0.30078125, -0.23046875, -0.10546875, -0.1953125, -0.36328125, -0.23046875, -0.3125, -0.21875, -0.36328125, -0.25390625, -0.3359375, -0.23046875, -0.3203125, -0.23046875, -0.3203125, -0.18359375, -0.328125, -0.21875, -0.296875, -0.203125, -0.3359375, -0.17578125, -0.3125, -0.23046875, -0.32421875, -0.1953125, -0.296875, -0.23046875, -0.09765625, -0.1953125, -0.3671875, -0.24609375, -0.3203125, -0.21484375, -0.35546875, -0.24609375, -0.3359375, -0.234375, -0.3046875, -0.21484375, -0.328125, -0.19140625, -0.33203125, -0.21875, -0.29296875, -0.203125, -0.34765625, -0.19140625, -0.3203125, -0.23046875, -0.3203125, -0.19921875, -0.3046875, -0.23828125, -0.1015625, -0.19921875, -0.37109375, -0.23828125, -0.3203125, -0.21484375, -0.35546875, -0.25390625, -0.3359375, -0.2109375, -0.34765625, -0.265625, -0.33984375, -0.19140625, -0.29296875, -0.22265625, -0.0859375, -0.19140625, -0.35546875, -0.23046875, -0.31640625, -0.2109375, -0.35546875, -0.2421875, -0.328125, -0.203125, -0.33984375, -0.26171875, -0.33984375, -0.19140625, -0.28515625, -0.21484375, -0.078125, -0.17578125]
+
+    winner = greatest_match(trace_a, 0.4, 2)
     print(winner)
-    print(find_exponent(winner))
 
 
