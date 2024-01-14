@@ -68,6 +68,50 @@ def generate_blinding_var(mod, public_exp):
     return v_f, v_i
 
 
+def montgomery_ladder_bitwise(base, exp, modulus):
+    """
+    Calculates "base ** exp mod modulus" using the montgomery method
+    :param base: integer base
+    :param exp: integer exponent
+    :param modulus: integer modulo
+    :return: base^exp mod modulus
+    """
+    r_0 = 1
+    r_1 = base
+    exp_binary = bin(exp)[2:]
+    # exp_binary = exp_binary[::-1]
+    for bit in exp_binary:
+        mask = -(bit == '0')    # 0 if bit '1' and -1 if bit '0'.
+        r_0_old = r_0
+        r_0 = ((r_0 ** 2 % modulus) & (mask)) | ((r_0 * r_1 % modulus) & (~mask))
+        r_1 = ((r_0_old * r_1 % modulus) & (mask)) | ((r_1 ** 2 % modulus) & (~mask))
+    return r_0
+
+
+def montgomery_bitwise_w_blinding(base, exp, modulus, public_exp):
+    """
+    Calculates "base ** exp mod modulus" using the montgomery method and uses blinding.
+    :param base: integer base
+    :param exp: integer private exponent
+    :param modulus: integer modulo
+    :param public_exp: integer public exponent
+    :return: base^exp mod modulus
+    """
+    v_f, v_i = generate_blinding_var(modulus, public_exp)
+    base = base * v_i % modulus
+    r_0 = 1
+    r_1 = base
+    exp_binary = bin(exp)[2:]
+    # exp_binary = exp_binary[::-1]
+    for bit in exp_binary:
+        mask = -(bit == '0')    # 0 if bit '1' and -1 if bit '0'.
+        r_0_old = r_0
+        r_0 = ((r_0 ** 2 % modulus) & (mask)) | ((r_0 * r_1 % modulus) & (~mask))
+        r_1 = ((r_0_old * r_1 % modulus) & (mask)) | ((r_1 ** 2 % modulus) & (~mask))
+    r_0 = r_0 * v_f % modulus
+    return r_0
+
+
 if __name__ == "__main__":
     a = Defender()
     result, trace = fast_exponent(4288743, 8234214, 43)
@@ -76,3 +120,7 @@ if __name__ == "__main__":
     result, trace = fast_exponent_blinding(4288743, a._e, a.n, a.d)
     print(result)
     print(pow(4288743, a._e, a.n))
+
+    print("montgomery with blinding:")
+    print(montgomery_bitwise_w_blinding(4288743, a._e, a.n, a.d))
+
